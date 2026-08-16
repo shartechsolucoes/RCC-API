@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 
-import type { Prisma } from "@fraternidade/database";
+import type { Prisma } from "../../../generated/client";
 import type { Request, Response } from "express";
 import { z } from "zod";
 

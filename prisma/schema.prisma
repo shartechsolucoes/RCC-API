@@ -1,0 +1,596 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// Perfil global do usuário (seção 10 do plano: evita dezenas de perfis distintos).
+// Papéis contextuais (ex.: "Coordenador da Missão Juventude", "Arcanjo da Equipe Música")
+// vivem em GroupMember.roleLabel / EventTeamMember.roleLabel, não aqui.
+enum ProfileLevel {
+  ROOT
+  COORDENACAO_GERAL
+  COORDENADOR
+  MEMBRO
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WAITLIST
+}
+
+enum GroupType {
+  MISSION
+  MINISTRY
+  TEAM
+}
+
+enum GroupRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum EventMemberStatus {
+  REGISTERED
+  CONFIRMED
+  CANCELLED
+  CHECKED_IN
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  LATE
+  CANCELLED
+}
+
+enum DocumentVisibility {
+  PUBLIC
+  MEMBERS
+  MISSION
+  MINISTRY
+  TEAM
+  COORDINATION
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  passwordHash String
+  profileLevel ProfileLevel @default(MEMBRO)
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  member          Member?
+  auditLogs       AuditLog[]
+  notifications   Notification[]
+  invitationsSent Invitation[]     @relation("InvitationsSentByUser")
+  news            News[]
+  posts           Post[]
+  documents       Document[]
+
+  @@map("users")
+}
+
+model Member {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  fullName  String
+  photoUrl  String?
+  phone     String?
+  birthDate DateTime?
+  city      String?
+  state     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  socials             MemberSocial[]
+  familyMembers       MemberFamily[]
+  emergencyContacts   EmergencyContact[]
+  registrations       Registration[]
+  groupMemberships    GroupMember[]
+  groupRequests       GroupRequest[]
+  missionRequests     MissionRequest[]
+  ministryRequests    MinistryRequest[]
+  coordinatedGroups   Group[]           @relation("GroupCoordinator")
+  eventMemberships    EventMember[]
+  eventTeamMemberships EventTeamMember[]
+  assignedTasks       EventTask[]
+
+  @@map("members")
+}
+
+model MemberSocial {
+  id       String @id @default(cuid())
+  memberId String
+  platform String
+  url      String
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("member_socials")
+}
+
+model MemberFamily {
+  id           String @id @default(cuid())
+  memberId     String
+  name         String
+  relationship String
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("member_family")
+}
+
+model EmergencyContact {
+  id           String  @id @default(cuid())
+  memberId     String
+  name         String
+  phone        String
+  relationship String?
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("emergency_contacts")
+}
+
+model Registration {
+  id        String             @id @default(cuid())
+  eventId   String?
+  memberId  String?
+  fullName  String
+  cpf       String?
+  email     String
+  phone     String?
+  photoUrl  String?            @db.LongText
+  status      RegistrationStatus @default(PENDING)
+  formData    Json?
+  checkedInAt DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  event         Event?                       @relation(fields: [eventId], references: [id])
+  member        Member?                      @relation(fields: [memberId], references: [id])
+  statusHistory RegistrationStatusHistory[]
+
+  @@index([eventId])
+  @@map("registrations")
+}
+
+model RegistrationStatusHistory {
+  id             String             @id @default(cuid())
+  registrationId String
+  status         RegistrationStatus
+  note           String?
+  changedAt      DateTime           @default(now())
+
+  registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@map("registration_status_history")
+}
+
+model Mission {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  groups   Group[]
+  requests MissionRequest[]
+
+  @@map("missions")
+}
+
+model Ministry {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  groups   Group[]
+  requests MinistryRequest[]
+
+  @@map("ministries")
+}
+
+model MissionRequest {
+  id          String              @id @default(cuid())
+  missionId   String
+  memberId    String
+  status      GroupRequestStatus  @default(PENDING)
+  requestedAt DateTime            @default(now())
+
+  mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  member  Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([missionId, memberId])
+  @@map("mission_requests")
+}
+
+model MinistryRequest {
+  id          String              @id @default(cuid())
+  ministryId  String
+  memberId    String
+  status      GroupRequestStatus  @default(PENDING)
+  requestedAt DateTime            @default(now())
+
+  ministry Ministry @relation(fields: [ministryId], references: [id], onDelete: Cascade)
+  member   Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([ministryId, memberId])
+  @@map("ministry_requests")
+}
+
+model Group {
+  id            String    @id @default(cuid())
+  type          GroupType
+  name          String
+  description   String?
+  photoUrl      String?
+  addressStreet String?
+  addressNumber String?
+  addressNeighborhood String?
+  addressCity   String?
+  addressState  String?
+  addressZipCode String?
+  missionId     String?
+  ministryId    String?
+  coordinatorId String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+
+  mission     Mission?       @relation(fields: [missionId], references: [id])
+  ministry    Ministry?      @relation(fields: [ministryId], references: [id])
+  coordinator Member?        @relation("GroupCoordinator", fields: [coordinatorId], references: [id])
+  members     GroupMember[]
+  requests    GroupRequest[]
+  meetings    Meeting[]
+  documents   Document[]
+  events      Event[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  id        String   @id @default(cuid())
+  groupId   String
+  memberId  String
+  roleLabel String   @default("Membro")
+  joinedAt  DateTime @default(now())
+
+  group  Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, memberId])
+  @@map("group_members")
+}
+
+model GroupRequest {
+  id          String              @id @default(cuid())
+  groupId     String
+  memberId    String
+  status      GroupRequestStatus  @default(PENDING)
+  requestedAt DateTime            @default(now())
+
+  group  Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("group_requests")
+}
+
+model Event {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  description   String?
+  coverImageUrl String?
+  location      String?
+  groupId       String?
+  isActive    Boolean  @default(true)
+  startDate   DateTime
+  endDate     DateTime
+  createdAt   DateTime @default(now())
+
+  group         Group?                  @relation(fields: [groupId], references: [id])
+  members       EventMember[]
+  teams         EventTeam[]
+  galleries     Gallery[]
+  transactions  FinancialTransaction[]
+  registrations Registration[]
+  sponsors      EventSponsor[]
+
+  @@map("events")
+}
+
+model EventSponsor {
+  id        String   @id @default(cuid())
+  eventId   String
+  companyId String
+  createdAt DateTime @default(now())
+
+  event   Event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, companyId])
+  @@map("event_sponsors")
+}
+
+model EventMember {
+  id           String             @id @default(cuid())
+  eventId      String
+  memberId     String
+  status       EventMemberStatus  @default(REGISTERED)
+  checkedInAt  DateTime?
+
+  event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, memberId])
+  @@map("event_members")
+}
+
+model EventTeam {
+  id      String @id @default(cuid())
+  eventId String
+  name    String
+
+  event   Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  members EventTeamMember[]
+  tasks   EventTask[]
+
+  @@map("event_teams")
+}
+
+model EventTeamMember {
+  id          String @id @default(cuid())
+  eventTeamId String
+  memberId    String
+  roleLabel   String @default("Membro")
+
+  eventTeam EventTeam @relation(fields: [eventTeamId], references: [id], onDelete: Cascade)
+  member    Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([eventTeamId, memberId])
+  @@map("event_team_members")
+}
+
+model EventTask {
+  id          String       @id @default(cuid())
+  eventTeamId String
+  title       String
+  description String?
+  assignedToId String?
+  startAt     DateTime?
+  endAt       DateTime?
+  priority    TaskPriority @default(MEDIUM)
+  status      TaskStatus   @default(TODO)
+  createdAt   DateTime     @default(now())
+
+  eventTeam  EventTeam @relation(fields: [eventTeamId], references: [id], onDelete: Cascade)
+  assignedTo Member?   @relation(fields: [assignedToId], references: [id])
+
+  @@map("event_tasks")
+}
+
+model CalendarEvent {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  startAt     DateTime
+  endAt       DateTime?
+  relatedType String?
+  relatedId   String?
+  createdAt   DateTime @default(now())
+
+  @@map("calendar_events")
+}
+
+model Meeting {
+  id          String   @id @default(cuid())
+  groupId     String
+  title       String
+  scheduledAt DateTime
+  location    String?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@map("meetings")
+}
+
+enum NewsStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model News {
+  id            String     @id @default(cuid())
+  title         String
+  subtitle      String?
+  slug          String     @unique
+  categoryId    String
+  isInternal    Boolean    @default(false)
+  status        NewsStatus @default(DRAFT)
+  content       String     @db.Text
+  coverImageUrl String?
+  authorId      String
+  publishedAt   DateTime?
+  viewCount     Int        @default(0)
+  createdAt     DateTime   @default(now())
+
+  author   User         @relation(fields: [authorId], references: [id])
+  category NewsCategory @relation(fields: [categoryId], references: [id])
+
+  @@map("news")
+}
+
+model NewsCategory {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  news News[]
+
+  @@map("news_categories")
+}
+
+model Post {
+  id        String   @id @default(cuid())
+  authorId  String
+  content   String
+  imageUrl  String?
+  createdAt DateTime @default(now())
+
+  author User @relation(fields: [authorId], references: [id])
+
+  @@map("posts")
+}
+
+model Document {
+  id         String             @id @default(cuid())
+  title      String
+  fileUrl    String
+  visibility DocumentVisibility @default(MEMBERS)
+  groupId    String?
+  uploadedById String
+  createdAt  DateTime           @default(now())
+
+  group      Group? @relation(fields: [groupId], references: [id])
+  uploadedBy User   @relation(fields: [uploadedById], references: [id])
+
+  @@map("documents")
+}
+
+model Company {
+  id                  String   @id @default(cuid())
+  name                String
+  description         String?  @db.Text
+  logoUrl             String?
+  website             String?
+  contactInfo         String?
+  addressStreet       String?
+  addressNumber       String?
+  addressNeighborhood String?
+  addressCity         String?
+  addressState        String?
+  addressZipCode      String?
+  createdAt           DateTime @default(now())
+
+  eventSponsorships EventSponsor[]
+
+  @@map("companies")
+}
+
+model Gallery {
+  id      String @id @default(cuid())
+  title   String
+  eventId String?
+
+  event  Event?         @relation(fields: [eventId], references: [id])
+  photos GalleryPhoto[]
+
+  @@map("galleries")
+}
+
+model GalleryPhoto {
+  id        String @id @default(cuid())
+  galleryId String
+  url       String
+  caption   String?
+
+  gallery Gallery @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+
+  @@map("gallery_photos")
+}
+
+model FinancialTransaction {
+  id          String           @id @default(cuid())
+  type        TransactionType
+  category    String
+  amount      Decimal          @db.Decimal(12, 2)
+  description String?
+  eventId     String?
+  receiptUrl  String?
+  occurredAt  DateTime
+  createdAt   DateTime         @default(now())
+
+  event Event? @relation(fields: [eventId], references: [id])
+
+  @@map("financial_transactions")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model Invitation {
+  id           String            @id @default(cuid())
+  email        String
+  invitedById  String
+  profileLevel ProfileLevel      @default(MEMBRO)
+  token        String            @unique
+  status       InvitationStatus  @default(PENDING)
+  expiresAt    DateTime
+  createdAt    DateTime          @default(now())
+
+  invitedBy User @relation("InvitationsSentByUser", fields: [invitedById], references: [id])
+
+  @@map("invitations")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
