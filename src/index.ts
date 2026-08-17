@@ -30,7 +30,8 @@ const allowedOrigins = (process.env.CORS_ORIGIN ?? "").split(",").filter(Boolean
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(cors({ origin: allowedOrigins.length ? allowedOrigins : true }));
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 app.get("/health", (_req, res) => {
