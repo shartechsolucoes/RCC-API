@@ -172,6 +172,70 @@ model Registration {
   phone     String?
   photoUrl  String?            @db.LongText
   status      RegistrationStatus @default(PENDING)
+  // Dados Pessoais
+  nomeCracha        String?
+  sexo              String?
+  dataNascimento    String?
+  instagram         String?
+  escolaridade      String?
+  profissao         String?
+
+  // Endereço
+  rua               String?
+  numero            String?
+  bairro            String?
+  cidade            String?
+  cep               String?
+  estado            String?
+  complemento       String?
+
+  // Sacramentos
+  sacramentoBatismo    Boolean?
+  sacramentoEucaristia Boolean?
+  sacramentoCrisma     Boolean?
+  sacramentoNenhum     Boolean?
+
+  // Experiência
+  participouMovimento Boolean?
+  quaisMovimentos     String?
+  incentivadoPor      String?
+  motivoEncontro      String?   @db.Text
+
+  // Saúde
+  usaMedicamentoContinuo  Boolean?
+  qualMedicamento         String?
+  temAlergiaMedicamento   Boolean?
+  quaisAlergiaMedicamento String?
+  temAlergiaAlimentar     Boolean?
+  quaisAlergiaAlimentar   String?
+  precisaCuidadoEspecial  Boolean?
+  qualCuidadoEspecial     String?
+
+  // Situação Familiar
+  isCasado             Boolean?
+  dataCasamento        String?
+  nomeConjuge          String?
+  temFilhos            Boolean?
+  idadesFilhos         String?
+  temParenteNoEncontro Boolean?
+  nomeParentesco       String?
+
+  // Contatos de Emergência
+  emergencia1Nome     String?
+  emergencia1Telefone String?
+  emergencia2Nome     String?
+  emergencia2Telefone String?
+  emergencia3Nome     String?
+  emergencia3Telefone String?
+
+  // Encontros Anteriores
+  encontrosResgataMe         Boolean?
+  encontrosResgatao          Boolean?
+  encontrosResgataMeConjugal Boolean?
+  encontrosOutros            Boolean?
+  encontrosOutrosQual        String?
+  encontrosNenhum            Boolean?
+
   formData    Json?
   checkedInAt DateTime?
   createdAt   DateTime           @default(now())

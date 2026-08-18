@@ -14,7 +14,55 @@ const createSchema = z.object({
   email: z.string().email(),
   phone: z.string().min(8).optional(),
   photoUrl: z.string().min(1).max(7_000_000).optional(),
-  formData: z.record(z.string(), z.unknown()).optional(),
+  
+  nomeCracha: z.string().optional(),
+  sexo: z.string().optional(),
+  dataNascimento: z.string().optional(),
+  instagram: z.string().optional(),
+  escolaridade: z.string().optional(),
+  profissao: z.string().optional(),
+  rua: z.string().optional(),
+  numero: z.string().optional(),
+  bairro: z.string().optional(),
+  cidade: z.string().optional(),
+  cep: z.string().optional(),
+  estado: z.string().optional(),
+  complemento: z.string().optional(),
+  sacramentoBatismo: z.boolean().optional(),
+  sacramentoEucaristia: z.boolean().optional(),
+  sacramentoCrisma: z.boolean().optional(),
+  sacramentoNenhum: z.boolean().optional(),
+  participouMovimento: z.boolean().optional(),
+  quaisMovimentos: z.string().optional(),
+  incentivadoPor: z.string().optional(),
+  motivoEncontro: z.string().optional(),
+  usaMedicamentoContinuo: z.boolean().optional(),
+  qualMedicamento: z.string().optional(),
+  temAlergiaMedicamento: z.boolean().optional(),
+  quaisAlergiaMedicamento: z.string().optional(),
+  temAlergiaAlimentar: z.boolean().optional(),
+  quaisAlergiaAlimentar: z.string().optional(),
+  precisaCuidadoEspecial: z.boolean().optional(),
+  qualCuidadoEspecial: z.string().optional(),
+  isCasado: z.boolean().optional(),
+  dataCasamento: z.string().optional(),
+  nomeConjuge: z.string().optional(),
+  temFilhos: z.boolean().optional(),
+  idadesFilhos: z.string().optional(),
+  temParenteNoEncontro: z.boolean().optional(),
+  nomeParentesco: z.string().optional(),
+  emergencia1Nome: z.string().optional(),
+  emergencia1Telefone: z.string().optional(),
+  emergencia2Nome: z.string().optional(),
+  emergencia2Telefone: z.string().optional(),
+  emergencia3Nome: z.string().optional(),
+  emergencia3Telefone: z.string().optional(),
+  encontrosResgataMe: z.boolean().optional(),
+  encontrosResgatao: z.boolean().optional(),
+  encontrosResgataMeConjugal: z.boolean().optional(),
+  encontrosOutros: z.boolean().optional(),
+  encontrosOutrosQual: z.string().optional(),
+  encontrosNenhum: z.boolean().optional(),
 });
 
 const statusSchema = z.object({
@@ -28,7 +76,7 @@ export async function create(req: Request, res: Response) {
     return res.status(400).json({ message: "Dados inválidos", issues: parsed.error.issues });
   }
 
-  const { eventId, fullName, cpf, email, phone, photoUrl, formData } = parsed.data;
+  const { eventId, fullName, cpf, email, phone, photoUrl, ...fields } = parsed.data;
 
   if (eventId) {
     const event = await prisma.event.findUnique({ where: { id: eventId } });
@@ -52,7 +100,7 @@ export async function create(req: Request, res: Response) {
       email,
       phone,
       photoUrl,
-      formData: formData as Prisma.InputJsonValue | undefined,
+      ...fields,
       statusHistory: { create: { status: "PENDING" } },
     },
   });
@@ -132,15 +180,10 @@ export async function promote(req: Request, res: Response) {
     return res.status(409).json({ message: "Já existe um usuário cadastrado com este e-mail" });
   }
 
-  const formData = (registration.formData ?? {}) as Record<string, unknown>;
-  const endereco = (formData.endereco ?? {}) as Record<string, unknown>;
-  const responsavelEmergencia = formData.responsavelEmergencia as string | undefined;
-  const contatoEmergencia = formData.contatoEmergencia as string | undefined;
-
   const tempPassword = crypto.randomBytes(9).toString("base64url");
   const passwordHash = await bcrypt.hash(tempPassword, 10);
 
-  const birthDateRaw = formData.dataNascimento as string | undefined;
+  const birthDateRaw = registration.dataNascimento as string | undefined;
   const birthDate = birthDateRaw ? new Date(birthDateRaw) : undefined;
 
   const user = await prisma.user.create({
@@ -154,13 +197,13 @@ export async function promote(req: Request, res: Response) {
           photoUrl: registration.photoUrl,
           phone: registration.phone,
           birthDate,
-          city: endereco.cidade as string | undefined,
-          state: endereco.estado as string | undefined,
-          emergencyContacts: contatoEmergencia
+          city: registration.cidade ?? undefined,
+          state: registration.estado ?? undefined,
+          emergencyContacts: registration.emergencia1Telefone
             ? {
                 create: {
-                  name: responsavelEmergencia ?? "Contato de emergência",
-                  phone: contatoEmergencia,
+                  name: registration.emergencia1Nome ?? "Contato de emergência",
+                  phone: registration.emergencia1Telefone,
                 },
               }
             : undefined,
