@@ -5,8 +5,10 @@ import type { AuthenticatedRequest } from "../../common/middlewares/auth.middlew
 import { prisma } from "../../lib/prisma";
 
 const createSchema = z.object({
+  title: z.string().optional(),
   content: z.string().min(1),
   imageUrl: z.string().url().optional(),
+  eventDate: z.coerce.date().optional(),
   isPublic: z.boolean().optional().default(false),
 });
 
@@ -44,6 +46,31 @@ export async function create(req: AuthenticatedRequest, res: Response) {
     include: authorInclude,
   });
   res.status(201).json(post);
+}
+
+export async function update(req: AuthenticatedRequest, res: Response) {
+  const parsed = createSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: "Dados inválidos", issues: parsed.error.issues });
+  }
+
+  const post = await prisma.post.findUnique({ where: { id: req.params.id } });
+  if (!post) {
+    return res.status(404).json({ message: "Postagem não encontrada" });
+  }
+
+  const isAuthor = post.authorId === req.userId;
+  const isManager = ["ROOT", "COORDENACAO_GERAL", "COORDENADOR"].includes(req.profileLevel ?? "");
+  if (!isAuthor && !isManager) {
+    return res.status(403).json({ message: "Acesso não permitido" });
+  }
+
+  const updated = await prisma.post.update({
+    where: { id: post.id },
+    data: parsed.data,
+    include: authorInclude,
+  });
+  res.json(updated);
 }
 
 export async function remove(req: AuthenticatedRequest, res: Response) {
