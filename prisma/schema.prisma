@@ -472,6 +472,7 @@ model Post {
   authorId  String
   content   String
   imageUrl  String?
+  isPublic  Boolean  @default(false)
   createdAt DateTime @default(now())
 
   author User @relation(fields: [authorId], references: [id])

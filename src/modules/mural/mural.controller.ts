@@ -1,4 +1,4 @@
-import type { Response } from "express";
+import type { Request, Response } from "express";
 import { z } from "zod";
 
 import type { AuthenticatedRequest } from "../../common/middlewares/auth.middleware";
@@ -7,6 +7,7 @@ import { prisma } from "../../lib/prisma";
 const createSchema = z.object({
   content: z.string().min(1),
   imageUrl: z.string().url().optional(),
+  isPublic: z.boolean().optional().default(false),
 });
 
 const authorInclude = {
@@ -14,6 +15,15 @@ const authorInclude = {
     select: { email: true, member: { select: { fullName: true, photoUrl: true } } },
   },
 } as const;
+
+export async function listPublic(_req: Request, res: Response) {
+  const posts = await prisma.post.findMany({
+    where: { isPublic: true },
+    include: authorInclude,
+    orderBy: { createdAt: "desc" },
+  });
+  res.json(posts);
+}
 
 export async function list(_req: AuthenticatedRequest, res: Response) {
   const posts = await prisma.post.findMany({
