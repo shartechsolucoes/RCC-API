@@ -73,6 +73,7 @@ const statusSchema = z.object({
 export async function create(req: Request, res: Response) {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) {
+    console.error("Validation error:", JSON.stringify(parsed.error.issues, null, 2), "Body:", req.body);
     return res.status(400).json({ message: "Dados inválidos", issues: parsed.error.issues });
   }
 
