@@ -18,11 +18,17 @@ const authorInclude = {
   },
 } as const;
 
-export async function listPublic(_req: Request, res: Response) {
+function parseLimit(value: unknown) {
+  const limit = Number(value);
+  return Number.isInteger(limit) && limit > 0 && limit <= 100 ? limit : undefined;
+}
+
+export async function listPublic(req: Request, res: Response) {
   const posts = await prisma.post.findMany({
     where: { isPublic: true },
     include: authorInclude,
     orderBy: { createdAt: "desc" },
+    take: parseLimit(req.query.limit),
   });
   res.json(posts);
 }

@@ -36,6 +36,11 @@ export async function list(_req: AuthenticatedRequest, res: Response) {
   res.json(news);
 }
 
+function parseLimit(value: unknown) {
+  const limit = Number(value);
+  return Number.isInteger(limit) && limit > 0 && limit <= 100 ? limit : undefined;
+}
+
 export async function listPublic(req: AuthenticatedRequest, res: Response) {
   const news = await prisma.news.findMany({
     where: {
@@ -45,6 +50,7 @@ export async function listPublic(req: AuthenticatedRequest, res: Response) {
     },
     include,
     orderBy: { publishedAt: "desc" },
+    take: parseLimit(req.query.limit),
   });
   res.json(news);
 }

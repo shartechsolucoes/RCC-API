@@ -28,8 +28,27 @@ const app = express();
 
 const allowedOrigins = (process.env.CORS_ORIGIN ?? "").split(",").filter(Boolean);
 
+// Fora de produção, aceita também origens da rede local (celular, outro PC).
+// Fixar o IP no CORS_ORIGIN não se sustenta porque o DHCP o troca.
+const LAN_ORIGIN =
+  /^https?:\/\/(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$/;
+
+function isAllowedOrigin(origin: string) {
+  if (allowedOrigins.includes(origin)) return true;
+  return process.env.NODE_ENV !== "production" && LAN_ORIGIN.test(origin);
+}
+
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
-app.use(cors({ origin: allowedOrigins.length ? allowedOrigins : true }));
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Sem Origin (curl, app nativo) não é requisição cross-origin de browser.
+      if (!origin) return callback(null, true);
+      if (!allowedOrigins.length) return callback(null, true);
+      callback(null, isAllowedOrigin(origin));
+    },
+  }),
+);
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
@@ -59,7 +78,8 @@ app.use("/calendar", calendarRoutes);
 app.use(errorHandler);
 
 const port = process.env.PORT ? Number(process.env.PORT) : 3333;
+const host = process.env.HOST || "0.0.0.0";
 
-app.listen(port, () => {
-  console.log(`API rodando em http://localhost:${port}`);
+app.listen(port, host, () => {
+  console.log(`API rodando em http://${host}:${port}`);
 });
