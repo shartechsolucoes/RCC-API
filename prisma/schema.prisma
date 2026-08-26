@@ -532,14 +532,15 @@ model NewsCategory {
 }
 
 model Post {
-  id        String    @id @default(cuid())
-  authorId  String
-  title     String?
-  content   String
-  imageUrl  String?
-  eventDate DateTime?
-  isPublic  Boolean   @default(false)
-  createdAt DateTime  @default(now())
+  id         String    @id @default(cuid())
+  authorId   String
+  title      String?
+  content    String
+  imageUrl   String?
+  eventDate  DateTime?
+  isPublic   Boolean   @default(false)
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
 
   author User @relation(fields: [authorId], references: [id])
 

@@ -25,7 +25,7 @@ function parseLimit(value: unknown) {
 
 export async function listPublic(req: Request, res: Response) {
   const posts = await prisma.post.findMany({
-    where: { isPublic: true },
+    where: { isPublic: true, archivedAt: null },
     include: authorInclude,
     orderBy: { createdAt: "desc" },
     take: parseLimit(req.query.limit),
@@ -35,6 +35,7 @@ export async function listPublic(req: Request, res: Response) {
 
 export async function list(_req: AuthenticatedRequest, res: Response) {
   const posts = await prisma.post.findMany({
+    where: { archivedAt: null },
     include: authorInclude,
     orderBy: { createdAt: "desc" },
   });
@@ -74,6 +75,26 @@ export async function update(req: AuthenticatedRequest, res: Response) {
   const updated = await prisma.post.update({
     where: { id: post.id },
     data: parsed.data,
+    include: authorInclude,
+  });
+  res.json(updated);
+}
+
+export async function archive(req: AuthenticatedRequest, res: Response) {
+  const post = await prisma.post.findUnique({ where: { id: req.params.id } });
+  if (!post) {
+    return res.status(404).json({ message: "Postagem não encontrada" });
+  }
+
+  const isAuthor = post.authorId === req.userId;
+  const isManager = ["ROOT", "COORDENACAO_GERAL", "COORDENADOR"].includes(req.profileLevel ?? "");
+  if (!isAuthor && !isManager) {
+    return res.status(403).json({ message: "Acesso não permitido" });
+  }
+
+  const updated = await prisma.post.update({
+    where: { id: post.id },
+    data: { archivedAt: new Date() },
     include: authorInclude,
   });
   res.json(updated);
