@@ -77,6 +77,35 @@ export async function login(req: Request, res: Response) {
   return res.json({ accessToken, refreshToken });
 }
 
+const changePasswordSchema = z.object({
+  currentPassword: z.string(),
+  newPassword: z.string().min(8),
+});
+
+export async function changePassword(req: AuthenticatedRequest, res: Response) {
+  const parsed = changePasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: "Dados inválidos", issues: parsed.error.issues });
+  }
+
+  const { currentPassword, newPassword } = parsed.data;
+
+  const user = await prisma.user.findUnique({ where: { id: req.userId } });
+  if (!user) {
+    return res.status(404).json({ message: "Usuário não encontrado" });
+  }
+
+  const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!valid) {
+    return res.status(401).json({ message: "Senha atual incorreta" });
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+
+  return res.json({ message: "Senha atualizada" });
+}
+
 export async function me(req: AuthenticatedRequest, res: Response) {
   const user = await prisma.user.findUnique({
     where: { id: req.userId },
