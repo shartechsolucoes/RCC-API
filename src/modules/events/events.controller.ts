@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import type { AuthenticatedRequest } from "../../common/middlewares/auth.middleware";
 import { prisma } from "../../lib/prisma";
+import { syncEventTeams } from "./event-teams.controller";
 
 const createSchema = z.object({
   name: z.string().min(3),
@@ -123,6 +124,7 @@ export async function create(req: AuthenticatedRequest, res: Response) {
   }
 
   const event = await prisma.event.create({ data: parsed.data });
+  await syncEventTeams(event.id);
   res.status(201).json(event);
 }
 
@@ -138,6 +140,9 @@ export async function update(req: AuthenticatedRequest, res: Response) {
   }
 
   const updated = await prisma.event.update({ where: { id: event.id }, data: parsed.data });
+  if (parsed.data.groupId !== undefined && parsed.data.groupId !== event.groupId) {
+    await syncEventTeams(updated.id);
+  }
   res.json(updated);
 }
 

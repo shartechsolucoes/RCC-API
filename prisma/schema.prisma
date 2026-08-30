@@ -123,6 +123,8 @@ model Member {
   coordinatedGroups   Group[]           @relation("GroupCoordinator")
   eventMemberships    EventMember[]
   eventTeamMemberships EventTeamMember[]
+  eventTeamRequests   EventTeamRequest[]
+  coordinatedEventTeams EventTeam[]     @relation("EventTeamCoordinator")
   assignedTasks       EventTask[]
 
   @@map("members")
@@ -341,8 +343,30 @@ model Group {
   meetings    Meeting[]
   documents   Document[]
   events      Event[]
+  teamTypes   TeamType[]
 
   @@map("groups")
+}
+
+// Catálogo de tipos de equipe. Um tipo com groupId nulo é global (vale para
+// todas as fraternidades); com groupId preenchido é exclusivo daquela fraternidade.
+// Ao criar um evento, uma equipe é instanciada para cada tipo aplicável.
+model TeamType {
+  id          String   @id @default(cuid())
+  groupId     String?
+  name        String
+  description String?
+  color       String?
+  order       Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  group      Group?      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  eventTeams EventTeam[]
+
+  @@index([groupId])
+  @@map("team_types")
 }
 
 model GroupMember {
@@ -424,22 +448,46 @@ model EventMember {
 }
 
 model EventTeam {
-  id      String @id @default(cuid())
-  eventId String
-  name    String
+  id            String  @id @default(cuid())
+  eventId       String
+  teamTypeId    String?
+  name          String
+  coordinatorId String?
+  capacity      Int?
+  createdAt     DateTime @default(now())
 
-  event   Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  members EventTeamMember[]
-  tasks   EventTask[]
+  event       Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  teamType    TeamType?         @relation(fields: [teamTypeId], references: [id])
+  coordinator Member?           @relation("EventTeamCoordinator", fields: [coordinatorId], references: [id])
+  members     EventTeamMember[]
+  requests    EventTeamRequest[]
+  tasks       EventTask[]
 
+  @@unique([eventId, teamTypeId])
+  @@index([eventId])
   @@map("event_teams")
 }
 
-model EventTeamMember {
-  id          String @id @default(cuid())
+model EventTeamRequest {
+  id          String             @id @default(cuid())
   eventTeamId String
   memberId    String
-  roleLabel   String @default("Membro")
+  status      GroupRequestStatus @default(PENDING)
+  requestedAt DateTime           @default(now())
+
+  eventTeam EventTeam @relation(fields: [eventTeamId], references: [id], onDelete: Cascade)
+  member    Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([eventTeamId, memberId])
+  @@map("event_team_requests")
+}
+
+model EventTeamMember {
+  id          String  @id @default(cuid())
+  eventTeamId String
+  memberId    String
+  roleLabel   String  @default("Membro")
+  isActive    Boolean @default(true)
 
   eventTeam EventTeam @relation(fields: [eventTeamId], references: [id], onDelete: Cascade)
   member    Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
