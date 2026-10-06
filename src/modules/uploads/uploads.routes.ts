@@ -9,6 +9,8 @@ const ALLOWED_MIME_TO_EXT: Record<string, string> = {
   "image/jpeg": ".jpg",
   "image/webp": ".webp",
   "image/gif": ".gif",
+  // comprovantes de pagamento Pix
+  "application/pdf": ".pdf",
 };
 
 const uploadsDir = path.join(__dirname, "../../../uploads");
@@ -26,7 +28,7 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (!ALLOWED_MIME_TO_EXT[file.mimetype]) {
-      cb(new Error("Tipo de arquivo não permitido. Envie PNG, JPG, WEBP ou GIF."));
+      cb(new Error("Tipo de arquivo não permitido. Envie PNG, JPG, WEBP, GIF ou PDF."));
       return;
     }
     cb(null, true);

@@ -25,6 +25,14 @@ enum RegistrationStatus {
   WAITLIST
 }
 
+// NOT_REQUIRED: inscrição gratuita. PROOF_SENT: inscrito enviou comprovante, falta conferir.
+enum PaymentStatus {
+  NOT_REQUIRED
+  PENDING
+  PROOF_SENT
+  PAID
+}
+
 enum GroupType {
   MISSION
   MINISTRY
@@ -91,7 +99,7 @@ model User {
   member          Member?
   auditLogs       AuditLog[]
   notifications   Notification[]
-  invitationsSent Invitation[]     @relation("InvitationsSentByUser")
+  invitationsSent Invitation[]   @relation("InvitationsSentByUser")
   news            News[]
   posts           Post[]
   documents       Document[]
@@ -100,32 +108,32 @@ model User {
 }
 
 model Member {
-  id        String   @id @default(cuid())
-  userId    String   @unique
+  id        String    @id @default(cuid())
+  userId    String    @unique
   fullName  String
   photoUrl  String?
   phone     String?
   birthDate DateTime?
   city      String?
   state     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  socials             MemberSocial[]
-  familyMembers       MemberFamily[]
-  emergencyContacts   EmergencyContact[]
-  registrations       Registration[]
-  groupMemberships    GroupMember[]
-  groupRequests       GroupRequest[]
-  missionRequests     MissionRequest[]
-  ministryRequests    MinistryRequest[]
-  coordinatedGroups   Group[]           @relation("GroupCoordinator")
-  eventMemberships    EventMember[]
-  eventTeamMemberships EventTeamMember[]
-  eventTeamRequests   EventTeamRequest[]
-  coordinatedEventTeams EventTeam[]     @relation("EventTeamCoordinator")
-  assignedTasks       EventTask[]
+  user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  socials               MemberSocial[]
+  familyMembers         MemberFamily[]
+  emergencyContacts     EmergencyContact[]
+  registrations         Registration[]
+  groupMemberships      GroupMember[]
+  groupRequests         GroupRequest[]
+  missionRequests       MissionRequest[]
+  ministryRequests      MinistryRequest[]
+  coordinatedGroups     Group[]            @relation("GroupCoordinator")
+  eventMemberships      EventMember[]
+  eventTeamMemberships  EventTeamMember[]
+  eventTeamRequests     EventTeamRequest[]
+  coordinatedEventTeams EventTeam[]        @relation("EventTeamCoordinator")
+  assignedTasks         EventTask[]
 
   @@map("members")
 }
@@ -165,31 +173,31 @@ model EmergencyContact {
 }
 
 model Registration {
-  id        String             @id @default(cuid())
-  eventId   String?
-  memberId  String?
-  fullName  String
-  cpf       String?
-  email     String
-  phone     String?
-  photoUrl  String?            @db.LongText
-  status      RegistrationStatus @default(PENDING)
+  id             String             @id @default(cuid())
+  eventId        String?
+  memberId       String?
+  fullName       String
+  cpf            String?
+  email          String
+  phone          String?
+  photoUrl       String?            @db.LongText
+  status         RegistrationStatus @default(PENDING)
   // Dados Pessoais
-  nomeCracha        String?
-  sexo              String?
-  dataNascimento    String?
-  instagram         String?
-  escolaridade      String?
-  profissao         String?
+  nomeCracha     String?
+  sexo           String?
+  dataNascimento String?
+  instagram      String?
+  escolaridade   String?
+  profissao      String?
 
   // Endereço
-  rua               String?
-  numero            String?
-  bairro            String?
-  cidade            String?
-  cep               String?
-  estado            String?
-  complemento       String?
+  rua         String?
+  numero      String?
+  bairro      String?
+  cidade      String?
+  cep         String?
+  estado      String?
+  complemento String?
 
   // Sacramentos
   sacramentoBatismo    Boolean?
@@ -201,7 +209,7 @@ model Registration {
   participouMovimento Boolean?
   quaisMovimentos     String?
   incentivadoPor      String?
-  motivoEncontro      String?   @db.Text
+  motivoEncontro      String?  @db.Text
 
   // Saúde
   usaMedicamentoContinuo  Boolean?
@@ -238,14 +246,24 @@ model Registration {
   encontrosOutrosQual        String?
   encontrosNenhum            Boolean?
 
-
   checkedInAt DateTime?
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
 
-  event         Event?                       @relation(fields: [eventId], references: [id])
-  member        Member?                      @relation(fields: [memberId], references: [id])
-  statusHistory RegistrationStatusHistory[]
+  // Pagamento (Pix manual: o inscrito envia o comprovante e a coordenação confirma).
+  totalAmount            Decimal       @default(0) @db.Decimal(10, 2)
+  paymentStatus          PaymentStatus @default(NOT_REQUIRED)
+  paymentToken           String?       @unique
+  paymentProofUrl        String?
+  paidAt                 DateTime?
+  financialTransactionId String?       @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  event                Event?                      @relation(fields: [eventId], references: [id])
+  member               Member?                     @relation(fields: [memberId], references: [id])
+  statusHistory        RegistrationStatusHistory[]
+  items                RegistrationItem[]
+  financialTransaction FinancialTransaction?       @relation(fields: [financialTransactionId], references: [id], onDelete: SetNull)
 
   @@index([eventId])
   @@map("registrations")
@@ -290,11 +308,11 @@ model Ministry {
 }
 
 model MissionRequest {
-  id          String              @id @default(cuid())
+  id          String             @id @default(cuid())
   missionId   String
   memberId    String
-  status      GroupRequestStatus  @default(PENDING)
-  requestedAt DateTime            @default(now())
+  status      GroupRequestStatus @default(PENDING)
+  requestedAt DateTime           @default(now())
 
   mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
   member  Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
@@ -304,11 +322,11 @@ model MissionRequest {
 }
 
 model MinistryRequest {
-  id          String              @id @default(cuid())
+  id          String             @id @default(cuid())
   ministryId  String
   memberId    String
-  status      GroupRequestStatus  @default(PENDING)
-  requestedAt DateTime            @default(now())
+  status      GroupRequestStatus @default(PENDING)
+  requestedAt DateTime           @default(now())
 
   ministry Ministry @relation(fields: [ministryId], references: [id], onDelete: Cascade)
   member   Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
@@ -318,22 +336,22 @@ model MinistryRequest {
 }
 
 model Group {
-  id            String    @id @default(cuid())
-  type          GroupType
-  name          String
-  description   String?
-  photoUrl      String?
-  addressStreet String?
-  addressNumber String?
+  id                  String    @id @default(cuid())
+  type                GroupType
+  name                String
+  description         String?
+  photoUrl            String?
+  addressStreet       String?
+  addressNumber       String?
   addressNeighborhood String?
-  addressCity   String?
-  addressState  String?
-  addressZipCode String?
-  missionId     String?
-  ministryId    String?
-  coordinatorId String?
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
+  addressCity         String?
+  addressState        String?
+  addressZipCode      String?
+  missionId           String?
+  ministryId          String?
+  coordinatorId       String?
+  isActive            Boolean   @default(true)
+  createdAt           DateTime  @default(now())
 
   mission     Mission?       @relation(fields: [missionId], references: [id])
   ministry    Ministry?      @relation(fields: [ministryId], references: [id])
@@ -384,11 +402,11 @@ model GroupMember {
 }
 
 model GroupRequest {
-  id          String              @id @default(cuid())
+  id          String             @id @default(cuid())
   groupId     String
   memberId    String
-  status      GroupRequestStatus  @default(PENDING)
-  requestedAt DateTime            @default(now())
+  status      GroupRequestStatus @default(PENDING)
+  requestedAt DateTime           @default(now())
 
   group  Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
   member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
@@ -404,18 +422,28 @@ model Event {
   coverImageUrl String?
   location      String?
   groupId       String?
-  isActive    Boolean  @default(true)
-  startDate   DateTime
-  endDate     DateTime
-  createdAt   DateTime @default(now())
+  isActive      Boolean  @default(true)
+  startDate     DateTime
+  endDate       DateTime
 
-  group         Group?                  @relation(fields: [groupId], references: [id])
+  // Inscrição: valor (0 = gratuita), Pix para receber e campos do formulário.
+  registrationFee Decimal @default(0) @db.Decimal(10, 2)
+  pixKey          String?
+  pixReceiverName String?
+  pixCity         String?
+  // { [campo]: "hidden" | "optional" | "required" }; campo ausente usa o padrão do catálogo.
+  formConfig      Json?
+
+  createdAt DateTime @default(now())
+
+  group         Group?                 @relation(fields: [groupId], references: [id])
   members       EventMember[]
   teams         EventTeam[]
   galleries     Gallery[]
   transactions  FinancialTransaction[]
   registrations Registration[]
   sponsors      EventSponsor[]
+  items         EventItem[]
 
   @@map("events")
 }
@@ -434,11 +462,11 @@ model EventSponsor {
 }
 
 model EventMember {
-  id           String             @id @default(cuid())
-  eventId      String
-  memberId     String
-  status       EventMemberStatus  @default(REGISTERED)
-  checkedInAt  DateTime?
+  id          String            @id @default(cuid())
+  eventId     String
+  memberId    String
+  status      EventMemberStatus @default(REGISTERED)
+  checkedInAt DateTime?
 
   event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
   member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
@@ -448,17 +476,19 @@ model EventMember {
 }
 
 model EventTeam {
-  id            String  @id @default(cuid())
+  id            String   @id @default(cuid())
   eventId       String
   teamTypeId    String?
   name          String
   coordinatorId String?
   capacity      Int?
+  // Equipe tirada deste evento. A linha fica para o sync não recriá-la e para poder restaurar.
+  isRemoved     Boolean  @default(false)
   createdAt     DateTime @default(now())
 
-  event       Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  teamType    TeamType?         @relation(fields: [teamTypeId], references: [id])
-  coordinator Member?           @relation("EventTeamCoordinator", fields: [coordinatorId], references: [id])
+  event       Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  teamType    TeamType?          @relation(fields: [teamTypeId], references: [id])
+  coordinator Member?            @relation("EventTeamCoordinator", fields: [coordinatorId], references: [id])
   members     EventTeamMember[]
   requests    EventTeamRequest[]
   tasks       EventTask[]
@@ -497,16 +527,16 @@ model EventTeamMember {
 }
 
 model EventTask {
-  id          String       @id @default(cuid())
-  eventTeamId String
-  title       String
-  description String?
+  id           String       @id @default(cuid())
+  eventTeamId  String
+  title        String
+  description  String?
   assignedToId String?
-  startAt     DateTime?
-  endAt       DateTime?
-  priority    TaskPriority @default(MEDIUM)
-  status      TaskStatus   @default(TODO)
-  createdAt   DateTime     @default(now())
+  startAt      DateTime?
+  endAt        DateTime?
+  priority     TaskPriority @default(MEDIUM)
+  status       TaskStatus   @default(TODO)
+  createdAt    DateTime     @default(now())
 
   eventTeam  EventTeam @relation(fields: [eventTeamId], references: [id], onDelete: Cascade)
   assignedTo Member?   @relation(fields: [assignedToId], references: [id])
@@ -515,14 +545,14 @@ model EventTask {
 }
 
 model CalendarEvent {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   title       String
   description String?
   startAt     DateTime
   endAt       DateTime?
   relatedType String?
   relatedId   String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   @@map("calendar_events")
 }
@@ -596,13 +626,13 @@ model Post {
 }
 
 model Document {
-  id         String             @id @default(cuid())
-  title      String
-  fileUrl    String
-  visibility DocumentVisibility @default(MEMBERS)
-  groupId    String?
+  id           String             @id @default(cuid())
+  title        String
+  fileUrl      String
+  visibility   DocumentVisibility @default(MEMBERS)
+  groupId      String?
   uploadedById String
-  createdAt  DateTime           @default(now())
+  createdAt    DateTime           @default(now())
 
   group      Group? @relation(fields: [groupId], references: [id])
   uploadedBy User   @relation(fields: [uploadedById], references: [id])
@@ -631,7 +661,7 @@ model Company {
 }
 
 model Gallery {
-  id      String @id @default(cuid())
+  id      String  @id @default(cuid())
   title   String
   eventId String?
 
@@ -642,7 +672,7 @@ model Gallery {
 }
 
 model GalleryPhoto {
-  id        String @id @default(cuid())
+  id        String  @id @default(cuid())
   galleryId String
   url       String
   caption   String?
@@ -653,19 +683,62 @@ model GalleryPhoto {
 }
 
 model FinancialTransaction {
-  id          String           @id @default(cuid())
+  id          String          @id @default(cuid())
   type        TransactionType
   category    String
-  amount      Decimal          @db.Decimal(12, 2)
+  amount      Decimal         @db.Decimal(12, 2)
   description String?
   eventId     String?
   receiptUrl  String?
   occurredAt  DateTime
-  createdAt   DateTime         @default(now())
+  createdAt   DateTime        @default(now())
 
-  event Event? @relation(fields: [eventId], references: [id])
+  event        Event?        @relation(fields: [eventId], references: [id])
+  registration Registration?
 
   @@map("financial_transactions")
+}
+
+// Item extra vendido junto com a inscrição (kit, camiseta...).
+model EventItem {
+  id           String   @id @default(cuid())
+  eventId      String
+  name         String
+  description  String?
+  // Lista de URLs de fotos do item.
+  images       Json?
+  // Opções de tamanho/variação (ex.: ["P","M","G"]). Vazio = item sem opções.
+  options      Json?
+  price        Decimal  @db.Decimal(10, 2)
+  maxPerPerson Int?
+  isActive     Boolean  @default(true)
+  order        Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  event             Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  registrationItems RegistrationItem[]
+
+  @@index([eventId])
+  @@map("event_items")
+}
+
+// Item escolhido numa inscrição. Nome e preço são copiados no momento da inscrição,
+// para o total não mudar se o item for editado depois.
+model RegistrationItem {
+  id             String  @id @default(cuid())
+  registrationId String
+  eventItemId    String?
+  name           String
+  // Opção escolhida (ex.: tamanho "M"), quando o item tem opções.
+  option         String?
+  unitPrice      Decimal @db.Decimal(10, 2)
+  quantity       Int
+
+  registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  eventItem    EventItem?   @relation(fields: [eventItemId], references: [id], onDelete: SetNull)
+
+  @@index([registrationId])
+  @@map("registration_items")
 }
 
 model Notification {
@@ -683,14 +756,14 @@ model Notification {
 }
 
 model Invitation {
-  id           String            @id @default(cuid())
+  id           String           @id @default(cuid())
   email        String
   invitedById  String
-  profileLevel ProfileLevel      @default(MEMBRO)
-  token        String            @unique
-  status       InvitationStatus  @default(PENDING)
+  profileLevel ProfileLevel     @default(MEMBRO)
+  token        String           @unique
+  status       InvitationStatus @default(PENDING)
   expiresAt    DateTime
-  createdAt    DateTime          @default(now())
+  createdAt    DateTime         @default(now())
 
   invitedBy User @relation("InvitationsSentByUser", fields: [invitedById], references: [id])
 

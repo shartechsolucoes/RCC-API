@@ -31,19 +31,16 @@ async function resolveManageContext(
   return { isTop, memberId, isGroupCoordinator };
 }
 
-// Gerência do evento: coordenação geral / root, o coordenador da fraternidade
-// responsável pelo evento, ou o coordenador da própria equipe.
-async function canManageTeam(
-  req: AuthenticatedRequest,
-  team: { coordinatorId: string | null; event: { groupId: string | null } },
-) {
-  const ctx = await resolveManageContext(req, team.event);
-  if (ctx.isTop || ctx.isGroupCoordinator) return true;
-  return Boolean(ctx.memberId && team.coordinatorId === ctx.memberId);
+// Quem monta as equipes do evento (coordenador, membros, tirar/devolver equipes):
+// coordenação geral / root ou o coordenador da fraternidade responsável.
+async function canManageEvent(req: AuthenticatedRequest, event: { groupId: string | null }) {
+  const ctx = await resolveManageContext(req, event);
+  return ctx.isTop || ctx.isGroupCoordinator;
 }
 
 // Instancia uma equipe para cada tipo aplicável ao evento (tipos globais + os da
-// fraternidade responsável). Idempotente: só cria o que ainda não existe.
+// fraternidade responsável). Idempotente: só cria o que ainda não existe — equipes
+// removidas do evento continuam existindo (isRemoved) e por isso não voltam.
 export async function syncEventTeams(eventId: string) {
   const event = await prisma.event.findUnique({ where: { id: eventId } });
   if (!event) return;
@@ -92,17 +89,18 @@ export async function listTeams(req: AuthenticatedRequest, res: Response) {
   await syncEventTeams(eventId);
 
   const teams = await prisma.eventTeam.findMany({
-    where: { eventId },
+    where: { eventId, isRemoved: false },
     include: teamInclude,
     orderBy: { name: "asc" },
   });
 
   const ctx = await resolveManageContext(req, event);
   const myMemberId = ctx.memberId;
+  const canManage = ctx.isTop || ctx.isGroupCoordinator;
+  const canRemove = canManage;
 
   res.json(
     teams.map((team) => {
-      const canManage = ctx.isTop || ctx.isGroupCoordinator || team.coordinatorId === myMemberId;
       const approved = team.members.map((m) => ({ ...m.member, isActive: m.isActive }));
       const requests = team.requests.map((r) => ({
         id: r.id,
@@ -131,12 +129,39 @@ export async function listTeams(req: AuthenticatedRequest, res: Response) {
         myRequest,
         isMember,
         canManage,
+        canRemove,
       };
     }),
   );
 }
 
-async function loadTeam(eventId: string, teamId: string) {
+// Equipes tiradas do evento, para quem pode devolvê-las.
+export async function listRemovedTeams(req: AuthenticatedRequest, res: Response) {
+  const event = await prisma.event.findUnique({ where: { id: req.params.id } });
+  if (!event) {
+    return res.status(404).json({ message: "Evento não encontrado" });
+  }
+
+  if (!(await canManageEvent(req, event))) {
+    return res.status(403).json({ message: "Acesso não permitido" });
+  }
+
+  const teams = await prisma.eventTeam.findMany({
+    where: { eventId: event.id, isRemoved: true },
+    select: {
+      id: true,
+      name: true,
+      teamType: { select: { id: true, name: true, color: true } },
+      _count: { select: { members: true } },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  res.json(teams.map(({ _count, ...team }) => ({ ...team, membersCount: _count.members })));
+}
+
+// Por padrão, equipes removidas do evento são tratadas como inexistentes.
+async function loadTeam(eventId: string, teamId: string, { includeRemoved = false } = {}) {
   const team = await prisma.eventTeam.findUnique({
     where: { id: teamId },
     include: {
@@ -145,49 +170,75 @@ async function loadTeam(eventId: string, teamId: string) {
     },
   });
   if (!team || team.eventId !== eventId) return null;
+  if (team.isRemoved && !includeRemoved) return null;
   return team;
 }
 
-// Membro pede para entrar numa equipe daquele evento.
-export async function requestToJoin(req: AuthenticatedRequest, res: Response) {
+// Tira a equipe deste evento. Integrantes, pedidos e tarefas ficam guardados
+// e voltam junto se a equipe for restaurada.
+export async function removeTeam(req: AuthenticatedRequest, res: Response) {
   const team = await loadTeam(req.params.id, req.params.teamId);
   if (!team) {
     return res.status(404).json({ message: "Equipe não encontrada" });
   }
 
-  const member = await prisma.member.findUnique({ where: { userId: req.userId as string } });
+  if (!(await canManageEvent(req, team.event))) {
+    return res.status(403).json({ message: "Acesso não permitido" });
+  }
+
+  await prisma.eventTeam.update({ where: { id: team.id }, data: { isRemoved: true } });
+  res.status(204).send();
+}
+
+export async function restoreTeam(req: AuthenticatedRequest, res: Response) {
+  const team = await loadTeam(req.params.id, req.params.teamId, { includeRemoved: true });
+  if (!team) {
+    return res.status(404).json({ message: "Equipe não encontrada" });
+  }
+
+  if (!(await canManageEvent(req, team.event))) {
+    return res.status(403).json({ message: "Acesso não permitido" });
+  }
+
+  await prisma.eventTeam.update({ where: { id: team.id }, data: { isRemoved: false } });
+  res.status(204).send();
+}
+
+const addMemberSchema = z.object({ memberId: z.string().min(1) });
+
+// Quem gerencia o evento coloca o membro direto na equipe (não há inscrição em equipe).
+export async function addMember(req: AuthenticatedRequest, res: Response) {
+  const parsed = addMemberSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: "Dados inválidos", issues: parsed.error.issues });
+  }
+
+  const team = await loadTeam(req.params.id, req.params.teamId);
+  if (!team) {
+    return res.status(404).json({ message: "Equipe não encontrada" });
+  }
+
+  if (!(await canManageEvent(req, team.event))) {
+    return res.status(403).json({ message: "Acesso não permitido" });
+  }
+
+  const member = await prisma.member.findUnique({ where: { id: parsed.data.memberId } });
   if (!member) {
-    return res.status(404).json({ message: "Perfil de membro não encontrado" });
+    return res.status(404).json({ message: "Membro não encontrado" });
   }
 
-  const alreadyMember = await prisma.eventTeamMember.findUnique({
+  const membership = await prisma.eventTeamMember.upsert({
     where: { eventTeamId_memberId: { eventTeamId: team.id, memberId: member.id } },
+    create: { eventTeamId: team.id, memberId: member.id },
+    update: { isActive: true },
   });
-  if (alreadyMember) {
-    return res.status(409).json({ message: "Você já faz parte desta equipe" });
-  }
 
-  if (team.capacity != null && activeCount(team) >= team.capacity) {
-    return res.status(409).json({ message: "As vagas desta equipe estão preenchidas" });
-  }
+  res.status(201).json(membership);
+}
 
-  const existing = await prisma.eventTeamRequest.findUnique({
-    where: { eventTeamId_memberId: { eventTeamId: team.id, memberId: member.id } },
-  });
-  if (existing && existing.status === "PENDING") {
-    return res.status(409).json({ message: "Você já solicitou entrada nesta equipe" });
-  }
-
-  const request = existing
-    ? await prisma.eventTeamRequest.update({
-        where: { id: existing.id },
-        data: { status: "PENDING", requestedAt: new Date() },
-      })
-    : await prisma.eventTeamRequest.create({
-        data: { eventTeamId: team.id, memberId: member.id },
-      });
-
-  res.status(201).json(request);
+// Desativado: as equipes são montadas pelo coordenador, membros não se inscrevem.
+export async function requestToJoin(_req: AuthenticatedRequest, res: Response) {
+  return res.status(403).json({ message: "As equipes são atribuídas pelo coordenador da fraternidade" });
 }
 
 // Membro cancela o próprio pedido pendente.
@@ -222,7 +273,7 @@ export async function updateRequestStatus(req: AuthenticatedRequest, res: Respon
     return res.status(404).json({ message: "Equipe não encontrada" });
   }
 
-  if (!(await canManageTeam(req, team))) {
+  if (!(await canManageEvent(req, team.event))) {
     return res.status(403).json({ message: "Acesso não permitido" });
   }
 
@@ -266,7 +317,7 @@ export async function removeMember(req: AuthenticatedRequest, res: Response) {
     return res.status(404).json({ message: "Equipe não encontrada" });
   }
 
-  if (!(await canManageTeam(req, team))) {
+  if (!(await canManageEvent(req, team.event))) {
     return res.status(403).json({ message: "Acesso não permitido" });
   }
 
@@ -294,7 +345,7 @@ export async function setMemberActive(req: AuthenticatedRequest, res: Response) 
     return res.status(404).json({ message: "Equipe não encontrada" });
   }
 
-  if (!(await canManageTeam(req, team))) {
+  if (!(await canManageEvent(req, team.event))) {
     return res.status(403).json({ message: "Acesso não permitido" });
   }
 
@@ -344,7 +395,7 @@ export async function updateTeam(req: AuthenticatedRequest, res: Response) {
     return res.status(404).json({ message: "Equipe não encontrada" });
   }
 
-  if (!(await canManageTeam(req, team))) {
+  if (!(await canManageEvent(req, team.event))) {
     return res.status(403).json({ message: "Acesso não permitido" });
   }
 

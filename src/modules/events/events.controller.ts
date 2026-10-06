@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { AuthenticatedRequest } from "../../common/middlewares/auth.middleware";
 import { prisma } from "../../lib/prisma";
 import { syncEventTeams } from "./event-teams.controller";
+import { publicRegistrationInfo } from "./registration-settings.controller";
 
 const createSchema = z.object({
   name: z.string().min(3),
@@ -69,7 +70,8 @@ export async function getById(req: AuthenticatedRequest, res: Response) {
     return res.status(404).json({ message: "Evento não encontrado" });
   }
 
-  res.json(event);
+  const registration = await publicRegistrationInfo(event.id);
+  res.json({ ...event, registrationFee: Number(event.registrationFee), registration });
 }
 
 const addSponsorSchema = z.object({
